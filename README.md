@@ -109,8 +109,6 @@ erDiagram
     users ||--o{ hydration_goals : "define"
 ```
 
-```
-
 ### Tabelas
 
 #### `users`
