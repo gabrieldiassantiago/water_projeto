@@ -14,10 +14,8 @@ export class DatabaseService implements OnModuleInit {
         });
 
         try {
-            const res = await this.pool.query('SELECT NOW()');
-            console.log('✅ PostgreSQL connected:', res.rows[0].now);
+            await this.pool.query('SELECT NOW()');
         } catch (e) {
-            console.error('❌ Database connection failed:', e);
             throw e;
         }
     }
