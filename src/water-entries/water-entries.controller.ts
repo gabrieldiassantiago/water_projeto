@@ -10,7 +10,6 @@ export class WaterEntriesController {
 
     @Post()
     create(@Body() dto: CreateWaterEntryDto) {
-        // Temporário: até implementarmos autenticação.
         const temporaryUserId = '1';
 
         return this.waterEntriesService.create(

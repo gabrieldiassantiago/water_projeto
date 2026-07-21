@@ -78,26 +78,37 @@ water-manager-api/
 
 ### Diagrama ER
 
+```mermaid
+erDiagram
+    users {
+        INTEGER id PK
+        VARCHAR name
+        VARCHAR email UK
+        VARCHAR password_hash
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    water_entries {
+        UUID id PK
+        INTEGER user_id FK
+        INTEGER amount_ml
+        TIMESTAMPTZ consumed_at
+        TIMESTAMPTZ created_at
+    }
+
+    hydration_goals {
+        INTEGER id PK
+        INTEGER user_id FK
+        INTEGER daily_amount_ml
+        DATE starts_at
+        DATE ends_at
+    }
+
+    users ||--o{ water_entries : "registra"
+    users ||--o{ hydration_goals : "define"
 ```
-┌─────────────────────┐       ┌──────────────────────────┐
-│       users          │       │      hydration_goals      │
-├─────────────────────┤       ├──────────────────────────┤
-│ id         INTEGER PK│◄──┐  │ id          INTEGER PK    │
-│ name       VARCHAR    │   │  │ user_id     INTEGER FK ───┘
-│ email      VARCHAR UK │   │  │ daily_amount_ml INTEGER   │
-│ password_hash VARCHAR │   │  │ starts_at   DATE          │
-│ created_at TIMESTAMPTZ│   │  │ ends_at     DATE (null)   │
-│ updated_at TIMESTAMPTZ│   │  └──────────────────────────┘
-└─────────────────────┘   │
-                           │  ┌──────────────────────────┐
-                           │  │      water_entries        │
-                           │  ├──────────────────────────┤
-                           └──│ id          UUID PK       │
-                              │ user_id     INTEGER FK    │
-                              │ amount_ml   INTEGER       │
-                              │ consumed_at TIMESTAMPTZ   │
-                              │ created_at  TIMESTAMPTZ   │
-                              └──────────────────────────┘
+
 ```
 
 ### Tabelas
