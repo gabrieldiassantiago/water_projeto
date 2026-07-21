@@ -6,5 +6,6 @@ import { DatabaseService } from '../database/database.service';
 @Module({
     controllers: [HydrationGoalsController],
     providers: [HydrationGoalsService, DatabaseService],
+    exports: [HydrationGoalsService],
 })
 export class HydrationGoalsModule { }

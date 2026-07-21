@@ -5,6 +5,7 @@ import { DatabaseService } from 'src/database/database.service';
 
 @Module({
   controllers: [WaterEntriesController],
-  providers: [WaterEntriesService, DatabaseService]
+  providers: [WaterEntriesService, DatabaseService],
+  exports: [WaterEntriesService],
 })
 export class WaterEntriesModule { }

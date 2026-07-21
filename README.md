@@ -207,6 +207,22 @@ A API estará disponível em `http://localhost:3000/api`.
 
 Todos os endpoints utilizam o prefixo `/api`.
 
+### Telegram Bot (Webhook)
+
+| Método | Rota                          | Descrição                                 |
+| ------ | ----------------------------- | ----------------------------------------- |
+| `POST` | `/api/telegram/webhook`       | Recebe eventos/mensagens do Telegram      |
+| `GET`  | `/api/telegram/setup-webhook` | Registra a URL do Webhook na API Telegram |
+
+#### Comandos suportados no Telegram:
+- `/beber 300` ou apenas `300` — Registra consumo de água (ex: 300 ml)
+- `/status` ou `/hoje` — Exibe consumo, meta e % do dia
+- `/meta 2500` — Define a meta diária (ex: 2500 ml)
+- `/historico` — Lista todos os registros de hoje
+- `/ajuda` — Exibe o menu de comandos
+
+---
+
 ### Water Entries
 
 | Método | Rota                        | Descrição                         |
