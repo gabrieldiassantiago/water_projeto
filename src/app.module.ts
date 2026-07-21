@@ -7,9 +7,12 @@ import { DatabaseService } from './database/database.service';
 import { WaterEntriesModule } from './water-entries/water-entries.module';
 import { HydrationGoalsModule } from './hydration-goals/hydration-goals.module';
 import { ReportsModule } from './reports/reports.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -18,6 +21,7 @@ import { ReportsModule } from './reports/reports.module';
     WaterEntriesModule,
     HydrationGoalsModule,
     ReportsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
