@@ -49,14 +49,14 @@ export class ReportsService {
         }>(
             `
             SELECT
-                DATE(consumed_at) AS date,
+                DATE(consumed_at AT TIME ZONE 'America/Sao_Paulo') AS date,
                 SUM(amount_ml) AS total_ml,
                 COUNT(*) AS entries
             FROM water_entries
             WHERE user_id = $1
                 AND consumed_at >= $2::date
                 AND consumed_at < ($3::date + INTERVAL '1 day')
-            GROUP BY DATE(consumed_at)
+            GROUP BY DATE(consumed_at AT TIME ZONE 'America/Sao_Paulo')
             ORDER BY date ASC
             `,
             [userId, startDate, endDate],

@@ -38,7 +38,7 @@ export class NotificationsService
             SELECT SUM(amount_ml)
             FROM water_entries
             WHERE user_id = 1
-              AND consumed_at >= CURRENT_DATE
+              AND consumed_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
           ),
           0
         ) AS consumed_ml

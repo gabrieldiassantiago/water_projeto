@@ -37,8 +37,8 @@ export class WaterEntriesService {
           created_at
         FROM water_entries
         WHERE user_id = $1
-          AND consumed_at >= CURRENT_DATE
-          AND consumed_at < CURRENT_DATE + INTERVAL '1 day'
+          AND consumed_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
+          AND consumed_at < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + INTERVAL '1 day'
         ORDER BY consumed_at DESC
       `,
             [userId],
@@ -56,8 +56,8 @@ export class WaterEntriesService {
           COALESCE(SUM(amount_ml), 0) AS total_ml
         FROM water_entries
         WHERE user_id = $1
-          AND consumed_at >= CURRENT_DATE
-          AND consumed_at < CURRENT_DATE + INTERVAL '1 day'
+          AND consumed_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
+          AND consumed_at < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + INTERVAL '1 day'
       `,
             [userId],
         );

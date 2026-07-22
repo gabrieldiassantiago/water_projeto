@@ -37,8 +37,8 @@ export class HydrationJob {
             SELECT daily_amount_ml
             FROM hydration_goals
             WHERE user_id = $1
-              AND starts_at <= CURRENT_DATE
-              AND (ends_at IS NULL OR ends_at >= CURRENT_DATE)
+              AND starts_at <= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
+              AND (ends_at IS NULL OR ends_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date)
             ORDER BY starts_at DESC, id DESC
             LIMIT 1
           ) AS goal_ml,
@@ -48,8 +48,8 @@ export class HydrationJob {
               SELECT SUM(amount_ml)
               FROM water_entries
               WHERE user_id = $1
-                AND consumed_at >= CURRENT_DATE
-                AND consumed_at < CURRENT_DATE + INTERVAL '1 day'
+                AND consumed_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
+                AND consumed_at < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + INTERVAL '1 day'
             ),
             0
           ) AS consumed_ml

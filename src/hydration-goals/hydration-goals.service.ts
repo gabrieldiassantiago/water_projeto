@@ -52,8 +52,8 @@ export class HydrationGoalsService {
                 ends_at
             FROM hydration_goals
             WHERE user_id = $1
-                AND starts_at <= CURRENT_DATE
-                AND (ends_at IS NULL OR ends_at >= CURRENT_DATE)
+                AND starts_at <= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
+                AND (ends_at IS NULL OR ends_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date)
             ORDER BY starts_at DESC
             LIMIT 1
             `,
@@ -127,8 +127,8 @@ export class HydrationGoalsService {
                 COALESCE(SUM(amount_ml), 0) AS consumed_ml
             FROM water_entries
             WHERE user_id = $1
-                AND consumed_at >= CURRENT_DATE
-                AND consumed_at < CURRENT_DATE + INTERVAL '1 day'
+                AND consumed_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
+                AND consumed_at < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + INTERVAL '1 day'
             `,
             [userId],
         );
