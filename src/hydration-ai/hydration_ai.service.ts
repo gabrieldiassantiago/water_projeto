@@ -125,7 +125,7 @@ ${history}
                     contents: prompt,
                     config: {
                         temperature: 0.7,
-                        maxOutputTokens: 600,
+                        maxOutputTokens: 1000000,
                     },
                 });
 
