@@ -10,6 +10,7 @@ import { ReportsModule } from './reports/reports.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerMiddleware } from './common/logger.middleware';
+import { MedicationsModule } from './medications/medications.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { LoggerMiddleware } from './common/logger.middleware';
     HydrationGoalsModule,
     ReportsModule,
     NotificationsModule,
+    MedicationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseService],
