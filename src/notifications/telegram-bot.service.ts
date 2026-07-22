@@ -454,9 +454,9 @@ export class TelegramBotService {
         }
 
         const answer =
-            await this.hydrationAiService.analyzeHydration(
+            await this.hydrationAiService.askQuestion(
+                userMessage,
                 {
-                    userMessage,
                     consumedMl,
                     dailyGoalMl,
                     remainingMl,
