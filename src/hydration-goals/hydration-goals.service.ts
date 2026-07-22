@@ -123,25 +123,61 @@ export class HydrationGoalsService {
             consumed_ml: string;
         }>(
             `
-            SELECT
-                COALESCE(SUM(amount_ml), 0) AS consumed_ml
-            FROM water_entries
-            WHERE user_id = $1
-                AND consumed_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
-                AND consumed_at < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + INTERVAL '1 day'
-            `,
+        SELECT
+            COALESCE(
+                SUM(amount_ml),
+                0
+            ) AS consumed_ml
+        FROM water_entries
+        WHERE user_id = $1
+          AND consumed_at >= (
+              (
+                  CURRENT_TIMESTAMP
+                  AT TIME ZONE 'America/Sao_Paulo'
+              )::date::timestamp
+              AT TIME ZONE 'America/Sao_Paulo'
+          )
+          AND consumed_at < (
+              (
+                  (
+                      CURRENT_TIMESTAMP
+                      AT TIME ZONE 'America/Sao_Paulo'
+                  )::date + 1
+              )::timestamp
+              AT TIME ZONE 'America/Sao_Paulo'
+          )
+        `,
             [userId],
         );
 
-        const consumedMl = Number(result.rows[0].consumed_ml);
-        const dailyAmountMl = goal.daily_amount_ml;
-        const remainingMl = Math.max(0, dailyAmountMl - consumedMl);
-        const percentage = Math.min(100, Math.round((consumedMl / dailyAmountMl) * 100));
+        const consumedMl = Number(
+            result.rows[0]?.consumed_ml ?? 0,
+        );
+
+        const dailyAmountMl = Number(
+            goal.daily_amount_ml,
+        );
+
+        const remainingMl = Math.max(
+            0,
+            dailyAmountMl - consumedMl,
+        );
+
+        const percentage =
+            dailyAmountMl > 0
+                ? Math.min(
+                    100,
+                    Math.round(
+                        (consumedMl / dailyAmountMl) *
+                        100,
+                    ),
+                )
+                : 0;
 
         return {
             goal: {
                 id: goal.id,
-                dailyAmountMl: goal.daily_amount_ml,
+                dailyAmountMl,
                 startsAt: goal.starts_at,
                 endsAt: goal.ends_at,
             },

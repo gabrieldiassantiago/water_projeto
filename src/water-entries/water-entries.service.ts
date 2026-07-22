@@ -3,23 +3,28 @@ import { DatabaseService } from '../database/database.service';
 
 @Injectable()
 export class WaterEntriesService {
-    constructor(private readonly database: DatabaseService) { }
+    constructor(
+        private readonly database: DatabaseService,
+    ) { }
 
-    async create(userId: string, amountMl: number) {
+    async create(
+        userId: string,
+        amountMl: number,
+    ) {
         const result = await this.database.query(
             `
-        INSERT INTO water_entries (
-          user_id,
-          amount_ml
-        )
-        VALUES ($1, $2)
-        RETURNING
-          id,
-          user_id,
-          amount_ml,
-          consumed_at,
-          created_at
-      `,
+            INSERT INTO water_entries (
+                user_id,
+                amount_ml
+            )
+            VALUES ($1, $2)
+            RETURNING
+                id,
+                user_id,
+                amount_ml,
+                consumed_at,
+                created_at
+            `,
             [userId, amountMl],
         );
 
@@ -29,18 +34,32 @@ export class WaterEntriesService {
     async findToday(userId: number) {
         const result = await this.database.query(
             `
-        SELECT
-          id,
-          user_id,
-          amount_ml,
-          consumed_at,
-          created_at
-        FROM water_entries
-        WHERE user_id = $1
-          AND consumed_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
-          AND consumed_at < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + INTERVAL '1 day'
-        ORDER BY consumed_at DESC
-      `,
+            SELECT
+                id,
+                user_id,
+                amount_ml,
+                consumed_at,
+                created_at
+            FROM water_entries
+            WHERE user_id = $1
+              AND consumed_at >= (
+                  (
+                      CURRENT_TIMESTAMP
+                      AT TIME ZONE 'America/Sao_Paulo'
+                  )::date::timestamp
+                  AT TIME ZONE 'America/Sao_Paulo'
+              )
+              AND consumed_at < (
+                  (
+                      (
+                          CURRENT_TIMESTAMP
+                          AT TIME ZONE 'America/Sao_Paulo'
+                      )::date + 1
+                  )::timestamp
+                  AT TIME ZONE 'America/Sao_Paulo'
+              )
+            ORDER BY consumed_at DESC
+            `,
             [userId],
         );
 
@@ -52,18 +71,37 @@ export class WaterEntriesService {
             total_ml: string;
         }>(
             `
-        SELECT
-          COALESCE(SUM(amount_ml), 0) AS total_ml
-        FROM water_entries
-        WHERE user_id = $1
-          AND consumed_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date
-          AND consumed_at < (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + INTERVAL '1 day'
-      `,
+            SELECT
+                COALESCE(
+                    SUM(amount_ml),
+                    0
+                ) AS total_ml
+            FROM water_entries
+            WHERE user_id = $1
+              AND consumed_at >= (
+                  (
+                      CURRENT_TIMESTAMP
+                      AT TIME ZONE 'America/Sao_Paulo'
+                  )::date::timestamp
+                  AT TIME ZONE 'America/Sao_Paulo'
+              )
+              AND consumed_at < (
+                  (
+                      (
+                          CURRENT_TIMESTAMP
+                          AT TIME ZONE 'America/Sao_Paulo'
+                      )::date + 1
+                  )::timestamp
+                  AT TIME ZONE 'America/Sao_Paulo'
+              )
+            `,
             [userId],
         );
 
         return {
-            totalMl: Number(result.rows[0].total_ml),
+            totalMl: Number(
+                result.rows[0]?.total_ml ?? 0,
+            ),
         };
     }
 }
