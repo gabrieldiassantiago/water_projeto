@@ -10,7 +10,6 @@ export class LoggerMiddleware implements NestMiddleware {
         const userAgent = req.get('user-agent') || '-';
         const start = Date.now();
 
-        // Log request body for POST/PATCH/PUT
         if (['POST', 'PATCH', 'PUT'].includes(method) && req.body) {
             this.logger.log(
                 `→ ${method} ${originalUrl} | Body: ${JSON.stringify(req.body)}`,
