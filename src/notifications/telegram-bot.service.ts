@@ -3,213 +3,548 @@ import { ConfigService } from '@nestjs/config';
 import { WaterEntriesService } from '../water-entries/water-entries.service';
 import { HydrationGoalsService } from '../hydration-goals/hydration-goals.service';
 import { NotificationsService } from './notifications.service';
+import { HydrationAiService } from 'src/hydration-ai/hydration_ai.service';
 
 export interface TelegramUpdate {
     update_id: number;
+
     message?: {
         message_id: number;
+
         from?: {
             id: number;
             first_name?: string;
             username?: string;
         };
+
         chat: {
             id: number | string;
             type: string;
         };
+
         text?: string;
         date: number;
     };
 }
 
+interface WaterEntry {
+    amount_ml: number | string;
+    consumed_at: Date | string;
+}
+
 @Injectable()
 export class TelegramBotService {
-    private readonly logger = new Logger(TelegramBotService.name);
+    private readonly logger = new Logger(
+        TelegramBotService.name,
+    );
 
     constructor(
         private readonly configService: ConfigService,
         private readonly waterEntriesService: WaterEntriesService,
         private readonly hydrationGoalsService: HydrationGoalsService,
         private readonly notificationsService: NotificationsService,
+        private readonly hydrationAiService: HydrationAiService,
     ) { }
 
-    async handleUpdate(update: TelegramUpdate): Promise<void> {
-        if (!update.message || !update.message.text) {
+    async handleUpdate(
+        update: TelegramUpdate,
+    ): Promise<void> {
+        if (!update.message?.text) {
             return;
         }
 
         const chatId = update.message.chat.id;
         const text = update.message.text.trim();
-        const userId = 1; // ID temporário padrão do sistema
 
-        this.logger.log(`Mensagem recebida do Telegram (${chatId}): "${text}"`);
+        const userId = 1;
+
+        this.logger.log(
+            `Mensagem recebida do Telegram (${chatId}): "${text}"`,
+        );
 
         try {
-            // Comando /start, /ajuda, /help
-            if (/^\/(start|help|ajuda)/i.test(text)) {
-                await this.sendHelpMessage(chatId);
+            if (/^\/(start|help|ajuda)(?:@\w+)?$/i.test(text)) {
+                await this.sendHelpMessage();
                 return;
             }
 
-            // Comando /status, /hoje, /progresso
-            if (/^\/(status|hoje|progresso)/i.test(text)) {
-                await this.sendStatusMessage(chatId, userId);
+            if (
+                /^\/(status|hoje|progresso)(?:@\w+)?$/i.test(
+                    text,
+                )
+            ) {
+                await this.sendStatusMessage(userId);
                 return;
             }
 
-            // Comando /historico, /history
-            if (/^\/(historico|history)/i.test(text)) {
-                await this.sendHistoryMessage(chatId, userId);
+            if (
+                /^\/(historico|history)(?:@\w+)?$/i.test(
+                    text,
+                )
+            ) {
+                await this.sendHistoryMessage(userId);
                 return;
             }
 
-            // Comando /meta [quantidade] ou /meta 3000
-            const metaMatch = text.match(/^\/meta\s+(\d+)/i);
+            const metaMatch = text.match(
+                /^\/meta(?:@\w+)?\s+(\d+)\s*(?:ml)?$/i,
+            );
+
             if (metaMatch) {
-                const amountMl = parseInt(metaMatch[1], 10);
-                await this.setGoal(chatId, userId, amountMl);
-                return;
-            }
+                const amountMl = Number.parseInt(
+                    metaMatch[1],
+                    10,
+                );
 
-            // Comando /beber [quantidade], /add [quantidade], ou apenas um número (ex: 300, 300ml, +300)
-            const beberMatch = text.match(/^(\/beber|\/add|\+)?\s*(\d+)\s*(ml)?$/i);
-            if (beberMatch) {
-                const amountMl = parseInt(beberMatch[2], 10);
-                if (amountMl > 0 && amountMl <= 10000) {
-                    await this.addWaterEntry(chatId, userId, amountMl);
+                if (amountMl < 100 || amountMl > 10000) {
+                    await this.notificationsService.sendTelegram(
+                        '⚠️ Informe uma meta entre 100 ml e 10.000 ml.\n\nExemplo: /meta 2500',
+                    );
+
                     return;
                 }
+
+                await this.setGoal(userId, amountMl);
+                return;
             }
 
-            // Comando não reconhecido
+            const aiMatch = text.match(
+                /^\/(?:ia|analisar)(?:@\w+)?(?:\s+([\s\S]+))?$/i,
+            );
+
+            if (aiMatch) {
+                const question =
+                    aiMatch[1]?.trim() ||
+                    'Analise minha hidratação de hoje.';
+
+                await this.sendAiAnalysis(
+                    userId,
+                    question,
+                );
+
+                return;
+            }
+
+            const beberMatch = text.match(
+                /^(?:(?:\/beber|\/add)(?:@\w+)?|\+)?\s*(\d+)\s*(?:ml)?$/i,
+            );
+
+            if (beberMatch) {
+                const amountMl = Number.parseInt(
+                    beberMatch[1],
+                    10,
+                );
+
+                if (amountMl <= 0 || amountMl > 10000) {
+                    await this.notificationsService.sendTelegram(
+                        '⚠️ Informe uma quantidade entre 1 ml e 10.000 ml.\n\nExemplo: /beber 300',
+                    );
+
+                    return;
+                }
+
+                await this.addWaterEntry(
+                    userId,
+                    amountMl,
+                );
+
+                return;
+            }
+
             await this.notificationsService.sendTelegram(
-                '❓ Comando não reconhecido.\n\nDigite /ajuda para ver a lista de comandos disponíveis.',
+                [
+                    '❓ Comando não reconhecido.',
+                    '',
+                    'Digite /ajuda para ver os comandos disponíveis.',
+                ].join('\n'),
             );
         } catch (error) {
-            this.logger.error('Erro ao processar mensagem do Telegram:', error);
-            await this.notificationsService.sendTelegram(
-                '❌ Ocorreu um erro ao processar seu comando. Tente novamente em instantes.',
+            this.logger.error(
+                'Erro ao processar mensagem do Telegram',
+                error instanceof Error
+                    ? error.stack
+                    : String(error),
             );
+
+            try {
+                await this.notificationsService.sendTelegram(
+                    '❌ Ocorreu um erro ao processar seu comando. Tente novamente em instantes.',
+                );
+            } catch (notificationError) {
+                this.logger.error(
+                    'Erro ao enviar mensagem de erro ao Telegram',
+                    notificationError instanceof Error
+                        ? notificationError.stack
+                        : String(notificationError),
+                );
+            }
         }
     }
 
-    private async addWaterEntry(chatId: string | number, userId: number, amountMl: number): Promise<void> {
-        await this.waterEntriesService.create(String(userId), amountMl);
+    private async addWaterEntry(
+        userId: number,
+        amountMl: number,
+    ): Promise<void> {
+        await this.waterEntriesService.create(
+            String(userId),
+            amountMl,
+        );
 
         let progressInfo = '';
+
         try {
-            const progress = await this.hydrationGoalsService.getProgress(userId);
-            const { consumedMl, remainingMl, percentage } = progress.today;
-            const dailyGoal = progress.goal.dailyAmountMl;
+            const progress =
+                await this.hydrationGoalsService.getProgress(
+                    userId,
+                );
+
+            const {
+                consumedMl,
+                remainingMl,
+                percentage,
+            } = progress.today;
+
+            const dailyGoal =
+                progress.goal.dailyAmountMl;
 
             progressInfo = [
                 '',
-                `💧 Consumido hoje: ${consumedMl.toLocaleString('pt-BR')} ml`,
-                `🎯 Meta diária: ${dailyGoal.toLocaleString('pt-BR')} ml`,
-                `📉 Restam: ${remainingMl.toLocaleString('pt-BR')} ml`,
+                `💧 Consumido hoje: ${Number(
+                    consumedMl,
+                ).toLocaleString('pt-BR')} ml`,
+                `🎯 Meta diária: ${Number(
+                    dailyGoal,
+                ).toLocaleString('pt-BR')} ml`,
+                `📉 Restam: ${Number(
+                    remainingMl,
+                ).toLocaleString('pt-BR')} ml`,
                 `📊 Progresso: ${percentage}%`,
-                percentage >= 100 ? '\n🎉 Parabéns! Você atingiu sua meta diária!' : '',
-            ].filter(Boolean).join('\n');
+                percentage >= 100
+                    ? ''
+                    : '',
+                percentage >= 100
+                    ? '🎉 Parabéns! Você atingiu sua meta diária!'
+                    : '',
+            ]
+                .filter(Boolean)
+                .join('\n');
         } catch {
-            const total = await this.waterEntriesService.getTodayTotal(userId);
-            progressInfo = `\n💧 Consumido hoje: ${total.totalMl.toLocaleString('pt-BR')} ml`;
+            const total =
+                await this.waterEntriesService.getTodayTotal(
+                    userId,
+                );
+
+            progressInfo = `\n💧 Consumido hoje: ${Number(
+                total.totalMl,
+            ).toLocaleString('pt-BR')} ml`;
         }
 
-        const message = `✅ *+${amountMl.toLocaleString('pt-BR')} ml* registrados com sucesso!${progressInfo}`;
-        await this.notificationsService.sendTelegram(message);
+        const message = [
+            `✅ +${amountMl.toLocaleString(
+                'pt-BR',
+            )} ml registrados com sucesso!`,
+            progressInfo,
+        ].join('');
+
+        await this.notificationsService.sendTelegram(
+            message,
+        );
     }
 
-    private async sendStatusMessage(chatId: string | number, userId: number): Promise<void> {
+    private async sendStatusMessage(
+        userId: number,
+    ): Promise<void> {
         try {
-            const progress = await this.hydrationGoalsService.getProgress(userId);
-            const { consumedMl, remainingMl, percentage } = progress.today;
-            const dailyGoal = progress.goal.dailyAmountMl;
+            const progress =
+                await this.hydrationGoalsService.getProgress(
+                    userId,
+                );
+
+            const {
+                consumedMl,
+                remainingMl,
+                percentage,
+            } = progress.today;
+
+            const dailyGoal =
+                progress.goal.dailyAmountMl;
 
             const message = [
-                '📊 *Status de Hidratação de Hoje*',
+                '📊 Status de hidratação de hoje',
                 '',
-                `💧 Consumido: ${consumedMl.toLocaleString('pt-BR')} ml`,
-                `🎯 Meta diária: ${dailyGoal.toLocaleString('pt-BR')} ml`,
-                `📉 Restam: ${remainingMl.toLocaleString('pt-BR')} ml`,
+                `💧 Consumido: ${Number(
+                    consumedMl,
+                ).toLocaleString('pt-BR')} ml`,
+                `🎯 Meta diária: ${Number(
+                    dailyGoal,
+                ).toLocaleString('pt-BR')} ml`,
+                `📉 Restam: ${Number(
+                    remainingMl,
+                ).toLocaleString('pt-BR')} ml`,
                 `📊 Progresso: ${percentage}%`,
             ].join('\n');
 
-            await this.notificationsService.sendTelegram(message);
-        } catch {
-            const total = await this.waterEntriesService.getTodayTotal(userId);
             await this.notificationsService.sendTelegram(
-                `📊 Consumido hoje: *${total.totalMl.toLocaleString('pt-BR')} ml*\n\n(Defina uma meta usando /meta [ml] para ver seu progresso%)`,
+                message,
+            );
+        } catch {
+            const total =
+                await this.waterEntriesService.getTodayTotal(
+                    userId,
+                );
+
+            await this.notificationsService.sendTelegram(
+                [
+                    `📊 Consumido hoje: ${Number(
+                        total.totalMl,
+                    ).toLocaleString('pt-BR')} ml`,
+                    '',
+                    'Defina uma meta usando /meta 2500 para visualizar seu progresso.',
+                ].join('\n'),
             );
         }
     }
 
-    private async setGoal(chatId: string | number, userId: number, dailyAmountMl: number): Promise<void> {
+    private async setGoal(
+        userId: number,
+        dailyAmountMl: number,
+    ): Promise<void> {
         try {
-            const currentGoal = await this.hydrationGoalsService.findCurrent(userId);
-            await this.hydrationGoalsService.update(currentGoal.id, userId, { dailyAmountMl });
+            const currentGoal =
+                await this.hydrationGoalsService.findCurrent(
+                    userId,
+                );
+
+            await this.hydrationGoalsService.update(
+                currentGoal.id,
+                userId,
+                {
+                    dailyAmountMl,
+                },
+            );
         } catch {
-            await this.hydrationGoalsService.create(userId, { dailyAmountMl });
+            await this.hydrationGoalsService.create(
+                userId,
+                {
+                    dailyAmountMl,
+                },
+            );
         }
 
         await this.notificationsService.sendTelegram(
-            `🎯 Nova meta de hidratação definida para *${dailyAmountMl.toLocaleString('pt-BR')} ml* por dia!`,
+            `🎯 Nova meta de hidratação definida para ${dailyAmountMl.toLocaleString(
+                'pt-BR',
+            )} ml por dia!`,
         );
     }
 
-    private async sendHistoryMessage(chatId: string | number, userId: number): Promise<void> {
-        const entries = await this.waterEntriesService.findToday(userId);
+    private async sendHistoryMessage(
+        userId: number,
+    ): Promise<void> {
+        const entries =
+            (await this.waterEntriesService.findToday(
+                userId,
+            )) as WaterEntry[];
 
         if (!entries || entries.length === 0) {
-            await this.notificationsService.sendTelegram('🏜️ Nenhum registro de consumo de água hoje.');
+            await this.notificationsService.sendTelegram(
+                '🏜️ Nenhum registro de consumo de água hoje.',
+            );
+
             return;
         }
 
-        const lines = entries.map((e: any) => {
-            const time = new Date(e.consumed_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-            return `• *${e.amount_ml} ml* às ${time}`;
+        const lines = entries.map((entry) => {
+            const time = new Date(
+                entry.consumed_at,
+            ).toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'America/Sao_Paulo',
+            });
+
+            const amountMl = Number(
+                entry.amount_ml,
+            );
+
+            return `• ${amountMl.toLocaleString(
+                'pt-BR',
+            )} ml às ${time}`;
         });
 
-        const total = entries.reduce((acc: number, item: any) => acc + item.amount_ml, 0);
+        const total = entries.reduce(
+            (accumulator, entry) =>
+                accumulator +
+                Number(entry.amount_ml),
+            0,
+        );
 
         const message = [
-            '📋 *Histórico de Registros de Hoje*',
+            '📋 Histórico de registros de hoje',
             '',
             ...lines,
             '',
-            `💧 Total: *${total.toLocaleString('pt-BR')} ml* (${entries.length} registros)`,
+            `💧 Total: ${total.toLocaleString(
+                'pt-BR',
+            )} ml`,
+            `📝 Registros: ${entries.length}`,
         ].join('\n');
 
-        await this.notificationsService.sendTelegram(message);
+        await this.notificationsService.sendTelegram(
+            message,
+        );
     }
 
-    private async sendHelpMessage(chatId: string | number): Promise<void> {
-        const message = [
-            '💧 *Water Manager Bot*',
-            '',
-            'Comandos disponíveis:',
-            '• `/beber 300` ou apenas `300` — Registrar consumo de água',
-            '• `/status` ou `/hoje` — Ver progresso do dia',
-            '• `/meta 2500` — Definir meta diária em ml',
-            '• `/historico` — Ver registros do dia',
-            '• `/ajuda` — Exibir este menu de ajuda',
-        ].join('\n');
+    private async sendAiAnalysis(
+        userId: number,
+        userMessage: string,
+    ): Promise<void> {
+        await this.notificationsService.sendTelegram(
+            '🤖 Analisando seus dados de hidratação...',
+        );
 
-        await this.notificationsService.sendTelegram(message);
-    }
+        const entries =
+            (await this.waterEntriesService.findToday(
+                userId,
+            )) as WaterEntry[];
 
-    async registerWebhook(appUrl: string): Promise<string> {
-        const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
-        if (!token) {
-            throw new Error('TELEGRAM_BOT_TOKEN não configurado.');
+        const normalizedEntries = (
+            entries ?? []
+        ).map((entry) => ({
+            amountMl: Number(entry.amount_ml),
+            consumedAt: entry.consumed_at,
+        }));
+
+        let consumedMl =
+            normalizedEntries.reduce(
+                (total, entry) =>
+                    total + entry.amountMl,
+                0,
+            );
+
+        let dailyGoalMl: number | null = null;
+        let remainingMl: number | null = null;
+        let percentage: number | null = null;
+
+        try {
+            const progress =
+                await this.hydrationGoalsService.getProgress(
+                    userId,
+                );
+
+            consumedMl = Number(
+                progress.today.consumedMl,
+            );
+
+            dailyGoalMl = Number(
+                progress.goal.dailyAmountMl,
+            );
+
+            remainingMl = Number(
+                progress.today.remainingMl,
+            );
+
+            percentage = Number(
+                progress.today.percentage,
+            );
+        } catch {
+            this.logger.warn(
+                `Usuário ${userId} ainda não possui uma meta ativa.`,
+            );
         }
 
-        const webhookUrl = `${appUrl.replace(/\/$/, '')}/api/telegram/webhook`;
-        const url = `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
+        const answer =
+            await this.hydrationAiService.analyzeHydration(
+                {
+                    userMessage,
+                    consumedMl,
+                    dailyGoalMl,
+                    remainingMl,
+                    percentage,
+                    entries: normalizedEntries,
+                },
+            );
+
+        await this.notificationsService.sendTelegram(
+            [
+                '🤖 Análise da sua hidratação',
+                '',
+                answer,
+            ].join('\n'),
+        );
+    }
+
+    private async sendHelpMessage(): Promise<void> {
+        const message = [
+            '💧 Water Manager Bot',
+            '',
+            'Comandos disponíveis:',
+            '',
+            '• /beber 300 — Registrar 300 ml',
+            '• /add 300 — Registrar 300 ml',
+            '• 300 — Registrar 300 ml',
+            '• /status — Ver o progresso do dia',
+            '• /hoje — Ver o progresso do dia',
+            '• /meta 2500 — Definir a meta diária',
+            '• /historico — Ver os registros do dia',
+            '• /ia como estou hoje? — Analisar os dados com IA',
+            '• /ajuda — Exibir esta ajuda',
+        ].join('\n');
+
+        await this.notificationsService.sendTelegram(
+            message,
+        );
+    }
+
+    async registerWebhook(
+        appUrl: string,
+    ): Promise<string> {
+        const token =
+            this.configService.get<string>(
+                'TELEGRAM_BOT_TOKEN',
+            );
+
+        if (!token) {
+            throw new Error(
+                'TELEGRAM_BOT_TOKEN não configurado.',
+            );
+        }
+
+        const normalizedAppUrl = appUrl.replace(
+            /\/$/,
+            '',
+        );
+
+        const webhookUrl =
+            `${normalizedAppUrl}/api/telegram/webhook`;
+
+        const url =
+            `https://api.telegram.org/bot${token}/setWebhook` +
+            `?url=${encodeURIComponent(webhookUrl)}`;
 
         const response = await fetch(url);
-        const data = await response.json();
 
-        this.logger.log(`Resultado do setWebhook: ${JSON.stringify(data)}`);
-        return data.description || 'Webhook configurado';
+        const data = (await response.json()) as {
+            ok?: boolean;
+            description?: string;
+        };
+
+        if (!response.ok || data.ok === false) {
+            throw new Error(
+                data.description ||
+                'Não foi possível configurar o webhook.',
+            );
+        }
+
+        this.logger.log(
+            `Resultado do setWebhook: ${JSON.stringify(
+                data,
+            )}`,
+        );
+
+        return (
+            data.description ||
+            'Webhook configurado'
+        );
     }
 }
