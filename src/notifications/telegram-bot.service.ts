@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { WaterEntriesService } from '../water-entries/water-entries.service';
 import { HydrationGoalsService } from '../hydration-goals/hydration-goals.service';
 import { NotificationsService } from './notifications.service';
-import { HydrationAiService } from 'src/hydration-ai/hydration_ai.service';
+import { HydrationAiService } from '../hydration-ai/hydration_ai.service';
 
 export interface TelegramUpdate {
     update_id: number;
@@ -105,6 +105,15 @@ export class TelegramBotService {
                 }
 
                 await this.setGoal(userId, amountMl);
+                return;
+            }
+
+            if (
+                /^\/(semana|7dias|semanal)(?:@\w+)?$/i.test(
+                    text,
+                )
+            ) {
+                await this.sendWeeklyAiAnalysis(userId);
                 return;
             }
 
@@ -474,6 +483,54 @@ export class TelegramBotService {
         );
     }
 
+    private async sendWeeklyAiAnalysis(
+        userId: number,
+    ): Promise<void> {
+        await this.notificationsService.sendTelegram(
+            '🤖 Analisando seu histórico dos últimos 7 dias com IA...',
+        );
+
+        const entries = await this.waterEntriesService.findLast7Days(
+            userId,
+        );
+
+        const normalizedEntries = entries.map((entry) => ({
+            amountMl: Number(entry.amount_ml),
+            consumedAt: entry.consumed_at,
+        }));
+
+        let dailyGoalMl: number | null = null;
+
+        try {
+            const progress =
+                await this.hydrationGoalsService.getProgress(
+                    userId,
+                );
+
+            dailyGoalMl = Number(
+                progress.goal.dailyAmountMl,
+            );
+        } catch {
+            this.logger.warn(
+                `Usuário ${userId} ainda não possui uma meta ativa.`,
+            );
+        }
+
+        const answer =
+            await this.hydrationAiService.analyze7DaysHistory({
+                dailyGoalMl,
+                entries: normalizedEntries,
+            });
+
+        await this.notificationsService.sendTelegram(
+            [
+                '📊 Análise dos últimos 7 dias (IA)',
+                '',
+                answer,
+            ].join('\n'),
+        );
+    }
+
     private async sendHelpMessage(): Promise<void> {
         const message = [
             '💧 Water Manager Bot',
@@ -488,6 +545,7 @@ export class TelegramBotService {
             '• /meta 2500 — Definir a meta diária',
             '• /historico — Ver os registros do dia',
             '• /ia como estou hoje? — Analisar os dados com IA',
+            '• /semana — Análise dos últimos 7 dias com IA',
             '• /ajuda — Exibir esta ajuda',
         ].join('\n');
 
