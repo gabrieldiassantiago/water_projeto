@@ -7,7 +7,7 @@ import { TelegramController } from './telegram.controller';
 import { TelegramBotService } from './telegram-bot.service';
 import { WaterEntriesModule } from '../water-entries/water-entries.module';
 import { HydrationGoalsModule } from '../hydration-goals/hydration-goals.module';
-import { HydrationAiService } from 'src/hydration-ai/hydration_ai.service';
+import { HydrationAiService } from '../hydration-ai/hydration_ai.service';
 
 @Module({
   imports: [DatabaseModule, WaterEntriesModule, HydrationGoalsModule],

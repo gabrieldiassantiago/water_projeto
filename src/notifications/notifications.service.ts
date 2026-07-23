@@ -70,7 +70,10 @@ export class NotificationsService
         );
     }
 
-    async sendTelegram(text: string): Promise<void> {
+    async sendTelegram(
+        text: string,
+        parseMode: 'Markdown' | 'HTML' | null = 'Markdown',
+    ): Promise<void> {
         const token =
             this.configService.get<string>('TELEGRAM_BOT_TOKEN');
 
@@ -83,6 +86,15 @@ export class NotificationsService
             );
         }
 
+        const payload: Record<string, any> = {
+            chat_id: chatId,
+            text,
+        };
+
+        if (parseMode) {
+            payload.parse_mode = parseMode;
+        }
+
         const response = await fetch(
             `https://api.telegram.org/bot${token}/sendMessage`,
             {
@@ -90,14 +102,15 @@ export class NotificationsService
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    chat_id: chatId,
-                    text,
-                }),
+                body: JSON.stringify(payload),
             },
         );
 
         if (!response.ok) {
+            if (parseMode) {
+                return this.sendTelegram(text, null);
+            }
+
             const error = await response.text();
 
             throw new Error(
