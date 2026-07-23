@@ -104,4 +104,38 @@ export class WaterEntriesService {
             ),
         };
     }
+
+    async findLast7Days(userId: number) {
+        const result = await this.database.query<{
+            id: number;
+            user_id: number;
+            amount_ml: number | string;
+            consumed_at: Date | string;
+            created_at: Date | string;
+        }>(
+            `
+            SELECT
+                id,
+                user_id,
+                amount_ml,
+                consumed_at,
+                created_at
+            FROM water_entries
+            WHERE user_id = $1
+              AND consumed_at >= (
+                  (
+                      (
+                          CURRENT_TIMESTAMP
+                          AT TIME ZONE 'America/Sao_Paulo'
+                      )::date - INTERVAL '6 days'
+                  )::timestamp
+                  AT TIME ZONE 'America/Sao_Paulo'
+              )
+            ORDER BY consumed_at ASC
+            `,
+            [userId],
+        );
+
+        return result.rows;
+    }
 }
